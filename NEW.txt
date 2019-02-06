@@ -1,0 +1,52 @@
+- Lefebvre et al. 2003 for the roughness scale of snow and ice
+- Calonne 2012 for permeability
+- Runoff according to a Darcy flow through saturated snow
+- variable layer thickness. Dynamic merging/splitting of layers.
+- initial layer thickness dependant on the accumulation
+
+
+Updates from 23-04-2017
+- added Miege case (and all input data related)
+- in update snow thickness set constant instrument height constant above the surface when input c.H_T==0 
+- in IniVar.m initiated snowc = c.cdel;
+- modified OutputName.m
+- Update PlotWeather.m
+
+Updates from 03-07-2017
+- using new function 'update_column_properties' to recalculate cdel, rcdel and cmid after each modification of the column in the subsurface scheme. Modification in subsurface function as well.
+
+- in snowfall_new: now if the mass of the column (excluding the last layer) is larger than a user-defined threshold lim_max_column and a fresh snow layer needs to be added on the top, then the last layer is discarded and the remaining layers shifted downward to free the first layer. If the mass of the column is smaller than the threshold, then two layers are merged to free the top layer.
+
+- in snowfall_new now if there is rain or melt the fresh snow bucket is transfered to the first layer
+
+- Changed cpice into cpiceF and temperature dependant parametrization (Yen 1981) is taken for the heat capacity of snow and ice. 
+
+- In ice_heats, Calculating thermal conductivity with temperature dependant parametrizations of Yen 1981. As a result both zsn_cond and zsn_capa are vectors and not scalar anymore. 
+
+- In refreeze, updating cpice to cpiceF.
+- In zsn_capaF, updating cpice to cpiceF and addition of ptsoil as input to the function
+
+- In superimposed_ice, zso_cond is now vector and need the index (isfrozen==1). Also changing cpice(0) to cpiceF(ptsoil(isfrozen==1)).
+
+- changing location of 'ice_heats'in subsurface script
+
+- in melting_new: before melting a layer, the energy that is needed to raise the layer temperature to melting point is removed from the amount of melt. If melt energy less than cold content then energy is used to warm the layer.
+
+- simplilfications in update_tempdiff_params. Renaming variables with explicit names. Use of the zsn_capaF to determine capacity of ice at the infinite sub-layer.
+
+- in merge_layer: We keep one third of the layers to describe the two deeper third of the column. Adding a test on crit_6-.
+
+Updates from 23-10-2017
+- in the precipitation scheme: The snow pit data is being used to calibrate the conversion from SR height to precipiation. It considers an average loss of 10% of precipitation through sublimation when it is being summed and compared to the snow pit data.
+
+Updates from 21-11-2017
+- Now output 2m air temperature from SEB calculation
+- Fixed a small error in SHF/LHF calculation for low wind speeds
+
+Updates 2018
+- bug fixed in the subsurface: c was not sent as output and therefor was not updated
+- shift in dayofyear in aws file and subsequently in the model output
+
+
+
+

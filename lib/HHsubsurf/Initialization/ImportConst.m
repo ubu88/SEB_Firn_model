@@ -66,6 +66,9 @@ Value = dataArray{:, 2};
 clearvars filename delimiter startRow formatSpec fileID dataArray ans;
 
 for i=1:length(Parameter)
+    if isempty(Parameter{i})
+        continue
+    end
     eval(sprintf('c.%s=%f;',Parameter{i},Value(i)));
 end
 clear Parameter Value
@@ -202,7 +205,6 @@ else
 end
 
 c.rh2oice = c.rho_water/c.rho_ice;
-c.zdtime = c.delta_time;
 c.cmid = zeros(c.jpgrnd,1);
 c.rcdel = zeros(c.jpgrnd,1);
 

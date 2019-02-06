@@ -22,10 +22,7 @@ function [rho_avg] = Calculate20mAvgDensity(snowc, snic, slwc, snowbkt, rho, c)
     ind_20m = isnan(rho_alt);
     ind_next =  boolean([0; ind_20m(1:end-1,:)]);
 
-try    rho_alt(ind_20m) = rho_alt(ind_next);
-catch me
-    khdfhv= 0;
-end
+    rho_alt(ind_20m) = rho_alt(ind_next);
 
     thickness_alt = depth_alt;
     thickness_alt(2:end,:) = depth_alt(2:end,:) - depth_alt(1:end-1,:);

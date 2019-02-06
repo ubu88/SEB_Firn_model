@@ -8,9 +8,9 @@
 % close all
 load Core_all
 
-station = 'NASA-SE';
+station = 'NGRIP';
 % Plot in the site you want
- PlotCore(Core,'Site',station)
+%  PlotCore(Core,'Site',station)
 
 % Find the index of the core you want to use
 % CoreList(CoreAvg)
@@ -33,7 +33,20 @@ switch station
     case 'Miege'
         ind = 120; %or 8
     case 'NASA-U'
-        ind = 127
+        ind = FindCore(Core,'Name','CORE 7347');
+    case 'SouthDome'
+        ind = FindCore(Core,'Name','S. Dome Core A');
+%         ind = FindCore(Core,'Name','S. Dome Core B');
+    case 'NASA-E'
+        ind = FindCore(Core,'Name','NASA East Core A');
+    case 'Saddle'
+        ind = FindCore(Core,'Name','N. Dye 3 (Saddle) - A');
+    case 'TUNU-N'
+        ind = FindCore(Core,'Name','B19_NGT19_1994');
+    case 'NGRIP'
+        ind = FindCore(Core,'Name','NG97S2~1-3bag');
+%         ind = FindCore(Core,'Name','NGRIP2001S5');
+       
 end
 
 % Creating density profile and writing it into the Input folder
@@ -47,9 +60,12 @@ ice_perc = Core{ind}.Data.Type_perc;
 %     ice_perc = ice_perc';
 %     ice_perc(length(ice_perc):length(density)) = 0;
 % end
-DensProfile = [depth, density, ice_perc];
+% DensProfile = [depth, density, ice_perc];
 filename = sprintf('./Input/Initial state/DensityProfile_%s_%i.csv',station,Core{ind}.Info.DateCored.Year);
-dlmwrite(filename,DensProfile,';');
+    M  = [depth, density];
+    M_table = array2table(M,'VariableName', {'depth_m', 'density_kgm3'});
+
+    writetable(M_table,filename,'Delimiter',';')
 
 fprintf('Initial density profile was generated from core %s and placed in Input folder.\n',Core{8}.Info.Name)
 PlotCore(Core,'CoreNumber',ind);

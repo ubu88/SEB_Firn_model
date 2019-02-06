@@ -13,84 +13,84 @@ switch length(varargin)
         operation = varargin{3};
         num_min_no_nan = varargin{4};
 end
-    time_start = datetime(datestr(data.time(1)));  
-    time_end = datetime(datestr(data.time(end)));  
-    time_new = datenum(time_start);
+    time_start = datevec(data.time(1));  
+    time_end = datevec(data.time(end));  
+    time_new = data.time(1);
     i = 1;
 
 switch period
     case 'monthly'
            while time_new(end) < datenum(time_end)
-               time_new(i) = datenum(time_start.Year, time_start.Month + i-1, 1);
+               time_new(i) = datenum(time_start(:,1), time_start(:,2) + i-1, 1);
                i = i + 1;
            end
     case 'yearly'
         while time_new(end) + 360 < datenum(time_end)
-           time_new(i) = datenum(time_start.Year + i-1, 1, 1);
+           time_new(i) = datenum(time_start(:,1) + i-1, 1, 1);
            i = i + 1;
         end
     case 'yearly2'
         while time_new(end) + 360 < datenum(time_end)
-           time_new(i) = datenum(time_start.Year + i-1, 1, 1);
+           time_new(i) = datenum(time_start(:,1) + i-1, 1, 1);
            i = i + 1;
         end
     case 'seasonaly'
-        temp = time_start.Month - [9, 12, 3, 6];
+        temp = time_start(:,2) - [9, 12, 3, 6];
         temp(temp>0) = NaN;
         missing_until_next_season = -max(temp);
-        time_new(i) = datenum(time_start.Year, ...
-            time_start.Month + missing_until_next_season,1);
+        time_new(i) = datenum(time_start(:,1), ...
+            time_start(:,2) + missing_until_next_season,1);
         i = i+1;
 
         %accumulation season from
         while time_new(end) + 350 < datenum(time_end)
-            temp = datetime(datestr(time_new(i-1)));
-           time_new(i) = datenum(temp.Year , temp.Month + 3, 1);
+            temp = datevec(time_new(i-1));
+           time_new(i) = datenum(temp(:,1) , temp(:,2) + 3, 1);
            i = i + 1;
         end
     case 'water-yearly'
-        temp = time_start.Month - [9, 9+12];
+        temp = time_start(:,2) - [9, 9+12];
         temp(temp>0) = NaN;
         missing_until_next_season = -max(temp);
-        time_new(i) = datenum(time_start.Year, ...
-            time_start.Month + missing_until_next_season,1);
+        time_new(i) = datenum(time_start(:,1), ...
+            time_start(:,2) + missing_until_next_season,1);
         i = i+1;
 
         %accumulation season from
         while time_new(end) < datenum(time_end)
-            temp = datetime(datestr(time_new(i-1)));
-           time_new(i) = datenum(temp.Year , temp.Month + 12, 1);
+            temp = datevec(time_new(i-1));
+           time_new(i) = datenum(temp(:,1) , temp(:,2) + 12, 1);
            i = i + 1;
         end
     case 'Jun-yearly'
-        temp = time_start.Month - [6, 6+12];
+        temp = time_start(:,2) - [6, 6+12];
         temp(temp>0) = NaN;
         missing_until_next_season = -max(temp);
-        time_new(i) = datenum(time_start.Year, ...
-            time_start.Month + missing_until_next_season,1);
+        time_new(i) = datenum(time_start(:,1), ...
+            time_start(:,2) + missing_until_next_season,1);
         i = i+1;
 
         %accumulation season from
         while time_new(end) < datenum(time_end)
-            temp = datetime(datestr(time_new(i-1)));
-           time_new(i) = datenum(temp.Year , temp.Month + 12, 1);
+            temp = datevec(time_new(i-1));
+           time_new(i) = datenum(temp(:,1) , temp(:,2) + 12, 1);
            i = i + 1;
         end
     case 'three-hourly'
        while time_new(end) < datenum(time_end)
-           time_new(i) = datenum(time_start.Year, time_start.Month, ...
-               time_start.Day+ time_start.Hour/24 + time_start.Minute/60/24 + (3/24) * (i-1));
+           time_new(i) = datenum(time_start(:,1), time_start(:,2), ...
+               time_start(:,3)+ time_start(:,4)/24 + time_start(:,5)/60/24 + (3/24) * (i-1));
            i = i + 1;
        end
     case 'hourly'
        while time_new(end) < datenum(time_end)
-           time_new(i) = datenum(time_start.Year, time_start.Month, ...
-               time_start.Day + time_start.Hour/24 + time_start.Minute/60/24 + (1/24) * (i-1));
+           time_new(i) = datenum(time_start(:,1), time_start(:,2), ...
+               time_start(:,3) + time_start(:,4)/24 + time_start(:,5)/60/24 + (1/24) * (i-1));
            i = i + 1;
        end
     case 'daily'
        while time_new(end) < datenum(time_end)
-           time_new(i) = datenum(time_start.Year, time_start.Month, floor(time_start.Day )+ i-1);
+           time_new(i) = datenum(time_start(:,1), time_start(:,2), floor(time_start(:,3) )+ i-1);
            i = i + 1;
        end
 end

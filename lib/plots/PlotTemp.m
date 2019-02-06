@@ -33,7 +33,6 @@ time_mat = varargin{1};
 depth_mat = varargin{2};
 mat = varargin{3};
 
-
 if size(mat,1) ~= size(depth_mat,1)
     mat = vertcat(mat, mat(end,:));
     time_mat = vertcat(time_mat,time_mat(end,:));
@@ -159,10 +158,9 @@ col =contourcmap(param.cmap,param.Range,'colorbar','on');
 
 view(0,-90)
 
-temp = datetime(datestr(datenum(0,0,time_mat(1,:))));
 time_mod = datenum(0,0,time_mat(1,:));
 
-set_monthly_tick(temp,gca);
+set_monthly_tick(time_mod);
 box on
 axis tight
 

@@ -73,16 +73,71 @@ diary(sprintf('%s/log.txt',c.OutputFolder));
     SRin, SRout, LRin, LRout, T_ice_obs, ...
     depth_thermistor, Surface_Height, Tsurf_obs, data_AWS, c] = ...
     ExtractAWSData(c);
+data_AWS_save = data_AWS;
+
+if c.retmip
+    filename = sprintf('./RetMIP/Input files/surface/RetMIP_%s.csv',c.station);
+    delimiter = ';';
+    startRow = 2;
+    formatSpec = '%{dd-MMM-yyyy HH:mm:ss}D%f%f%f%[^\n\r]';
+    fileID = fopen(filename,'r');
+    dataArray = textscan(fileID, formatSpec, 'Delimiter', delimiter, 'EmptyValue' ,NaN,'HeaderLines' ,startRow-1, 'ReturnOnError', false);
+    fclose(fileID);
+    data_AWS = table(dataArray{1:end-1}, 'VariableNames', {'time','melt_mmweq','acc_subl_mmweq','Tsurf_K'});
+    clearvars filename delimiter startRow formatSpec fileID dataArray ans;
+    
+    % time
+    year = data_AWS.time.Year;
+    hour = data_AWS.time.Hour;
+    DV = datevec(data_AWS.time);
+    day = 	datenum(DV(:,1),DV(:,2),DV(:,3))-datenum(DV(:,1),0,0);
+    % leap years    
+    time = year + (day + hour/24)/365;
+    leapyear = find(year/4 == floor(year/4));
+    if sum(leapyear) >0
+        time(leapyear) = year(leapyear)+(day(leapyear)+hour(leapyear)/24.)/366;
+    end
+    
+    melt = data_AWS.melt_mmweq/1000;
+    Tsurf_obs = data_AWS.Tsurf_K;
+    c.solve_T_surf = 0;
+    
+    c.dt_obs  = (hour(2) - hour(1)) *3600;   % observational time step in seconds
+    c.zdtime = c.dt_obs;
+    c.delta_time = c.dt_obs;
+    c.M = size(data_AWS,1);
+    c.rows = size(data_AWS,1);
+    c.rho_snow = ones(c.rows,1)*315;
+    
+    data_AWS.Snowfallmweq = data_AWS.acc_subl_mmweq/1000;
+    
+    pres= NaN(c.rows,1);
+    T1= NaN(c.rows,1);
+    T2= NaN(c.rows,1);
+    z_T1= NaN(c.rows,1);
+    z_T2= NaN(c.rows,1);
+    o_T1= NaN(c.rows,1);
+    o_T2= NaN(c.rows,1);
+    RH1= NaN(c.rows,1);
+    RH2= NaN(c.rows,1);
+    z_RH1= NaN(c.rows,1);
+    z_RH2= NaN(c.rows,1);
+    o_RH1= NaN(c.rows,1);
+    o_RH2= NaN(c.rows,1);
+    WS1= NaN(c.rows,1);
+    WS2= NaN(c.rows,1);
+    z_WS1= NaN(c.rows,1);
+    z_WS2= NaN(c.rows,1);
+    o_WS1= NaN(c.rows,1);
+    o_WS2= NaN(c.rows,1);
+    SRin= NaN(c.rows,1);
+    SRout= NaN(c.rows,1);
+    LRin= NaN(c.rows,1);
+    LRout= NaN(c.rows,1);
+end
 
 [elev, pres, T, RH, WS, SRin, LRin, rho_atm, nu, ~, ~, Tdeep] ...
     = PrepareTransect(pres, T2, RH2, WS2, SRin, LRin, c);
-
-[H_comp, GF, GFsurf, GFsubsurf, H_melt_weq, H_rain,...
-H_subl, H_surf,H_surf_weq, H_snow, L, LHF, meltflux, meltflux_internal, ...
-rho, ~, runoff, SHF, SRnet,SRout_mdl,  T_ice, grndc, grndd , ~, ~, ~, zrogl, ...
-pdgrain, refreezing, snowbkt, theta_2m, q_2m, ws_10m, Tsurf, snowthick,...
-z_icehorizon, Re,Ri, err]...
-= IniVar(c);
 
 %Initialization of freshsnow density for both precipitation at the surface
 %and use in the subsurface scheme
@@ -97,6 +152,7 @@ c.rho_snow = IniRhoSnow(T1, WS1, elev, c);
 [RH2, q2] = SpecHumSat(RH2, T2, pres, c);
 
 % q = q*1000;
+
 %Calculated precipitation types and temp
 if sum(strcmp(data_AWS.Properties.VariableNames,'Snowfallmweq'))>0
     snowfall = data_AWS.Snowfallmweq;
@@ -104,8 +160,15 @@ if sum(strcmp(data_AWS.Properties.VariableNames,'Snowfallmweq'))>0
     T_rain = zeros(size(T1));
 else
     [snowfall, rainfall, T_rain, c] = ...
-        Precipitation(time, T1, LRin_AWS,RH1, Surface_Height, c);
+        Precipitation(time, T1, LRin,RH1, Surface_Height, c);
 end
+    
+[H_comp, GF, GFsurf, GFsubsurf, H_melt_weq, H_rain,...
+H_subl, H_surf,H_surf_weq, H_snow, L, LHF, meltflux, meltflux_internal, ...
+rho, ~, runoff, SHF, SRnet,SRout_mdl,  T_ice, grndc, grndd , ~, ~, ~, zrogl, ...
+pdgrain, refreezing, snowbkt, theta_2m, q_2m, ws_10m, Tsurf, snowthick,...
+z_icehorizon, Re,Ri, err]...
+= IniVar(c);
 
 c = CalculateMeanAccumulation(time,snowfall, c);
 
@@ -115,23 +178,93 @@ if c.track_density
     % figure
     % hold on
 end
+if c.track_temp
+    for i = 1:7
+        temp_tracker{i}= NaN(c.jpgrnd,c.M);
+    end
+end
+    
+
                         
 %% START OF SPATIAL LOOP -----------------------------------------------------------------------
 for j=1:c.elev_bins
     c.Tdeep = Tdeep(j);
-% Initial temperature and density profile
-%         if ~isnan(LRout(1))
-%             Tsurf_ini = (LRout(1)/c.sigma).^(1/4);
-%         else
-        Tsurf(1,j) = T2(1);
-%         end
+    % Initial temperature and density profile
+    %         if ~isnan(LRout(1))
+    %             Tsurf_ini = (LRout(1)/c.sigma).^(1/4);
+    %         else
+            Tsurf(1,j) = T2(1);
+    %         end
 
     [T_ice, rhofirn,rho(:,1),snic, snowc, slwc, pdgrain(:,1)] = ...
         InitializationSubsurface(T_ice_obs, depth_thermistor, T_ice, ...
         time, Tsurf(1,j), j, c);
     
+    % preparing some variables
 %     theta1 = T1(:,j) + z_T1(:,j) * c.g / c.c_pd;
     theta2 = T2(:,j) + z_T2(:,j) * c.g / c.c_pd;
+%     theta_v1 = theta1 .* (1 + ((1 - c.es)/c.es).*q1);
+    theta2_v = theta2 .* (1 + ((1 - c.es)/c.es).*q2);
+    
+    err(:,j) = 0;
+    o_THF = err(:,j)+1;
+    
+    if c.THF_calc == 2 || c.THF_calc == 3
+        % Testing conditions required for profile method
+        % Weather variables from various origins
+        test = o_T1(:,j) + o_T2(:,j) + o_RH1(:,j) + o_RH2(:,j) + o_WS1(:,j) + o_WS2(:,j) ~= 0;
+        err(test,j) = 1;
+            
+        % WS below 1 m s-1
+        test = or(WS1(:,j)<1, WS2(:,j)<1);
+        err(test,j) = 2;   
+            
+        % Weather variables from same origin but T and RH measured at different height
+        test = z_T1(:,j) ~= z_RH1(:,j);
+        err(test,j) = 3;
+            
+        % WS2 <= WS1
+        test = WS2(:,j)-WS1(:,j)<=0;
+        err(test,j) = 4;
+            
+        if err(:,j) == 0       
+            [LHF(:,j), SHF(:,j), theta_2m(:,j), q_2m(:,j), ws_10m(:,j),Ri(:,j)] ...
+                = SensLatFluxes_profile (z_T1(:,j),z_T2(:,j),...
+                T1(:,j),T2(:,j),q1(:,j),q2(:,j),WS1(:,j),WS2(:,j),pres(:,j), c);
+
+            % Ri out of bound
+            test =  isnan(Ri(:,j));
+            err(test,j) = 5;
+            
+            % Unrealistically high SHF and LHF
+            test =   abs(LHF(:,j))> 200 || abs(SHF(:,j))> 200;
+            err(test,j) = 6;
+            
+            % Surface temperature below 0K
+            test =   Tsurf(:,j)<=0 ;
+            err(test,j) = 7;
+            
+            % Profile method output NaN (not from arleady listed errors)
+            test =   isnan(LHF(:,j)) ||isnan(Tsurf(:,j)) || isnan(SHF(:,j)) ;
+            err(test,j) = 8;
+            
+            LHF(err~=0,j)=NaN;
+            SHF(err~=0,j)=NaN;
+        end
+        
+        o_THF(err==0) = 2;
+        o_THF(err~=0) = 1;
+        
+        if c.THF_calc == 3
+            LHF2 = LHF;
+            SHF2 = SHF;
+            o_THF2 = o_THF;
+
+            LHF(:)=NaN;
+            SHF(:)=NaN;
+            o_THF(:) = 1;
+        end
+    end
     
     % START OF TIME LOOP -----------------------------------------------------------------------
     for k = 1:c.M
@@ -139,7 +272,6 @@ for j=1:c.elev_bins
         %=========== Step 1/*: Update snowthickness and instrument heights ====================================
         [snowthick, z_icehorizon] = ...
             UpdateSnowThickness(snowthick,z_icehorizon, k, j, c);
-   
         % ========== Step 3/*: shortwave radiation balance snow & ice penetration ====================================
         if k > 1
             rho(:,k) = rho(:,k-1);
@@ -150,67 +282,87 @@ for j=1:c.elev_bins
 
          % ========== Step 5/*:  Surface temperature calculation ====================================
 
-
         k_eff = 0.021 + 2.5e-6*rho(:,k).^2 ;        
         % effective conductivity by Anderson 1976, is ok at limits
         % thickness of the first layer in m weq for thermal transfer
         thick_first_lay = snic(1) + snowc(1);
-
+        
         % starting surface temperature solving
-            c.o_THF = 1;
-            if and(c.solve_T_surf == 0, ~isnan(Tsurf_obs(k)))
-                % if user asked for using measured surface temperature instead
-                % of solving for it and that there is a measurement available
-                iter_max_EB = 1; % we do one iteration in the solver bellow
-                Tsurf(k,j) = Tsurf_obs(k); % we use measured surface temp
-            else
-                iter_max_EB = c.iter_max_EB; % otherwise just using standard value
-            end
+        if and(c.solve_T_surf == 0, ~isnan(Tsurf_obs(k)))
+            % if user asked for using measured surface temperature instead
+            % of solving for it and that there is a measurement available
+            iter_max_EB = 1; % we do one iteration in the solver bellow
+            Tsurf(k,j) = Tsurf_obs(k); % we use measured surface temp
+        else
+            iter_max_EB = c.iter_max_EB; % otherwise just using standard value
+        end
             
-            % Prepare parameters needed for SEB
-            EB_prev = 1;
-            dTsurf = c.dTsurf_ini ;  % Initial surface temperature step in search for EB=0 (C)
+        % Prepare parameters needed for SEB
+        EB_prev = 1;
+        dTsurf = c.dTsurf_ini ;  % Initial surface temperature step in search for EB=0 (C)
 
 % figure
 % hold on
+        if o_THF(k,j) == 1
+            % Update BV2017: z_0 is calculated once outside the SEB loop
+            if snowthick > c.smallno
+                % if there is snow
+                if snowbkt > c.smallno
+                    % fresh snow
+                    z_0 = c.z0_fresh_snow;
+                else
+                    % old snow from Lefebre et al (2003) JGR
+                    z_0 = max(c.z0_old_snow, ...
+                        c.z0_old_snow + (c.z0_ice -c.z0_old_snow)*(rho(1,k) - 600)/(920 - 600));
+                end
+            else
+                % ice roughness length
+                z_0 = c.z0_ice;
+            end
+        end
+    
+        for findbalance = 1 : iter_max_EB
+            % SENSIBLE AND LATENT HEAT FLUX -------------------------------
+            if o_THF(k,j) == 1
+                [L(k,j), LHF(k,j), SHF(k,j), theta_2m(k,j), q_2m(k,j), ws_10m(k,j),Re(k,j)] ...
+                    = SensLatFluxes_bulk (WS2(k,j), nu(k,j), q2(k,j), snowthick(k,j), ...
+                    Tsurf(k,j), theta2(k,j),theta2_v(k,j), pres(k,j), rho_atm(k,j),  z_WS2(k,j), z_T2(k,j), z_RH2(k,j), ...
+                    z_0, c);
+            end
 
-            for findbalance = 1 : iter_max_EB
-                % SENSIBLE AND LATENT HEAT FLUX -------------------------------
-                    err(k,j) = 0;
+            % SURFACE ENERGY BUDGET ---------------------------------------
 
-                        c.o_THF = 1;
-                        [L(k,j), LHF(k,j), SHF(k,j), theta_2m(k,j), q_2m(k,j), ws_10m(k,j),Re(k,j)] ...
-                            = SensLatFluxes_bulk (WS2(k,j), nu(k,j), q2(k,j), snowthick(k,j), ...
-                            Tsurf(k,j), theta2(k,j), pres(k,j), rho_atm(k,j),  z_WS2(k,j), z_T2(k,j), z_RH2(k,j), ...
-                            snowbkt, rho(1,k), c);
-
-                % SURFACE ENERGY BUDGET ---------------------------------------
-
-                        [meltflux(k,j), Tsurf(k,j), dTsurf, EB_prev, stop] ...
-                            = SurfEnergyBudget (SRnet, LRin(k,j), Tsurf(k,j), k_eff,thick_first_lay, ...
-                            T_ice(:,k,j), T_rain(k,j),...
-                            dTsurf, EB_prev, SHF(k,j), LHF(k,j), rainfall(k,j),c);
+            [meltflux(k,j), Tsurf(k,j), dTsurf, EB_prev, stop] ...
+                = SurfEnergyBudget (SRnet, LRin(k,j), Tsurf(k,j), k_eff,thick_first_lay, ...
+                T_ice(:,k,j), T_rain(k,j),...
+                dTsurf, EB_prev, SHF(k,j), LHF(k,j), rainfall(k,j),c);
 % scatter(findbalance,Tsurf(k,j))
 % xlim([0 iter_max_EB])
-% title(c.o_THF)
+% title(o_THF)
 % pause(0.001)
-         
 
-                if stop
-                    break
-                end
-            end %end loop surface energy balance
+                if iter_max_EB == 1
+                    % if we are using surface temperature it might have been
+                    % modified by SurfEnergyBudget. So we assign it again.
+                    Tsurf(k,j) = Tsurf_obs(k); 
+                end             
 
-            if iter_max_EB ~= 1 && ...
-                (findbalance == c.iter_max_EB && abs(meltflux(k,j)) >= 10*c.EB_max)
-                error('Problem closing energy budget')
+            if stop
+                break
             end
-            clear findbalance
+        end %end loop surface energy balance
+
+        if iter_max_EB ~= 1 && ...
+            (findbalance == c.iter_max_EB && abs(meltflux(k,j)) >= 10*c.EB_max)
+            error('Problem closing energy budget')
+        end
+        clear findbalance
         
         % ========== Step 6/*:  Mass Budget ====================================
     [dH_melt_weq, H_melt_weq, dH_subl_weq, H_subl, H_snow, H_rain, snowthick] = ...
         MassBudget (meltflux, H_subl, H_melt_weq, H_snow, H_rain, LHF, ...
         snowfall, rainfall, snowthick, elev, j, k, c);
+
 
     % in the case of the conduction model, the mass budget is calculated as
     % follows
@@ -250,9 +402,17 @@ for j=1:c.elev_bins
         raind = rainfall(k,j);
         c.rho_fresh_snow = c.rho_snow(k,j);
         
+        if c.retmip
+            zsn = data_AWS.acc_subl_mmweq(k)/1000;
+            snmel = data_AWS.melt_mmweq(k)/1000;
+        end
+        
         if k==1
             grndc =T_ice(:,k,j);
             grndd(:) =0;
+        end
+        if strcmp(c.station,'Miege')
+            [slwc] = MimicAquiferFlow(snowc, rhofirn, snic, slwc, k,  c);
         end
 
         [snowc, snic, slwc, ptsoil_out, zrfrz, rhofirn,...
@@ -262,20 +422,24 @@ for j=1:c.elev_bins
             ptsoil_in, pdgrain, zsn, raind, snmel, zrogl, Tdeep(j),...
             snowbkt,c);
 
-        
-                        % Update BV 2018
-                        if c.track_density
-                            density_avg_20(1,k) = c.rho_avg_aft_comp;
-                            density_avg_20(2,k) = c.rho_avg_aft_snow;
-                            density_avg_20(3,k) = c.rho_avg_aft_subl;
-                            density_avg_20(4,k) = c.rho_avg_aft_melt;
-                            density_avg_20(5,k) = c.rho_avg_aft_runoff;
-                            density_avg_20(6,k) = c.rho_avg_aft_rfrz;
-%                             if k>10 
-%                                 plot([k-1 k-1+[1:6]./6], [density_avg_20(6,k-1) ; density_avg_20(:,k)],'--o')
-%                                 pause
-%                             end
-                        end
+        % Update BV 2018
+        if c.track_density
+            density_avg_20(1,k) = c.rho_avg_aft_comp;
+            density_avg_20(2,k) = c.rho_avg_aft_snow;
+            density_avg_20(3,k) = c.rho_avg_aft_subl;
+            density_avg_20(4,k) = c.rho_avg_aft_melt;
+            density_avg_20(5,k) = c.rho_avg_aft_runoff;
+            density_avg_20(6,k) = c.rho_avg_aft_rfrz;
+        end
+        if c.track_temp
+            temp_tracker{1}(:,k) = c.T_firn_ini;
+            temp_tracker{2}(:,k) = c.T_firn_after_dif;
+            temp_tracker{3}(:,k) = c.T_firn_after_snow;
+            temp_tracker{4}(:,k) = c.T_firn_after_sub;
+            temp_tracker{5}(:,k) = c.T_firn_after_melt;
+            temp_tracker{6}(:,k) = c.T_firn_after_refreeze;
+            temp_tracker{7}(:,k) = c.T_firn_after_SI_ice;
+        end
                             
 
         T_ice(:,k,j)=ptsoil_out;
@@ -301,11 +465,52 @@ for j=1:c.elev_bins
             % cumulative dry compaction
             H_comp(k,j) = H_comp(k-1,j) + dH_comp; %in real m
 
-
+%             % thickness of snowpack
+%             if (snowthick(k-1,j) > 0)
+%                 snowthick(k,j) = snowthick(k-1,j) ...
+%                     + (snowfall(k,j) - dH_melt_weq - dH_subl_weq)*c.rho_water/c.rho_snow(k,j);
+%             elseif (snowthick(k-1,j) == 0)
+%                 snowthick(k,j) = snowfall(k,j);
+%             elseif (snowthick(k-1,j) < 0)
+%                 disp('Alarm! Negative snow depth!')
+%             end
         end
         
         if(snowthick(k,j) < 0)
          snowthick(k,j)=0;
+        end
+
+        % for the conduction model the temperature profile can be resetted
+        % at fixed interval
+        if c.ConductionModel == 1
+            if (mod(k-1, 24) == 0)
+                if sum(~isnan(T_ice_obs(k,:)))>0
+                    [Tsurf(k,j), T_reset] = ...
+                        ResetTemp(depth_thermistor, LRin, LRout, T_ice_obs, ...
+                        rho, T_ice,time, k, c);
+%                     figure
+                    depth_act = cumsum(c.cdel .*c.rho_water ./rho(:,k));
+                    depth_act = [0; depth_act];
+
+%                     scatter(depth_thermistor(k,depth_thermistor(k,:)~=0),...
+%                         T_ice_obs(k,depth_thermistor(k,:) ~= 0), 'o')
+%                     hold on
+%                     stairs(depth_act(1:end-1),T_ice(:,k,j)-c.T_0)
+                    
+                T_ice(~isnan(T_reset),k,j) = T_reset(~isnan(T_reset));
+%                     stairs(depth_act(1:end-1),T_ice(:,k,j)-c.T_0)
+%                     legend('data','before reset','after reset','Location','South')
+%                     xlabel('Depth (m)')
+%                     ylabel('Temperature (deg C)')
+%                     title(sprintf('%s',datestr(datenum(time(k),0,0))))
+%                     view([90 90])
+   
+                    [zso_capa, zso_cond] = ice_heats (c);
+                    [grndc, grndd, ~, ~]...
+                        = update_tempdiff_params (rho(:,k), Tdeep(j)                    ...
+                        , snowc, snic, T_ice(:,k,j), zso_cond, zso_capa, c);
+                end
+            end            
         end
 
         % MODEL RUN PROGRESS ----------------------------------------------
@@ -325,7 +530,6 @@ for j=1:c.elev_bins
             sav. pdgrain = zeros(c.jpgrnd,c.M);
             sav. rhofirn = zeros(c.jpgrnd,c.M);
             sav. subsurf_compaction = zeros(c.jpgrnd,c.M);
-            sav. o_THF = zeros(c.M,1);
         end
         
         sav. slwc(:,k) = slwc;
@@ -335,7 +539,6 @@ for j=1:c.elev_bins
         sav. rhofirn(:,k) = rhofirn;
         sav. subsurf_compaction(:,k) = compaction;
         sav.z_T(k) = z_T2(k);
-        sav.o_THF(k) = c.o_THF;
     end  % END OF TIME LOOP -----------------------------------------------------------------------
     
     rainHF = c.rho_water.*c.c_w(1).*rainfall.*c.dev./c.dt_obs.*(T_rain-Tsurf(:,j));
@@ -344,40 +547,31 @@ for j=1:c.elev_bins
     % INTERPOLATION BACK TO ORIGINAL TIME RESOLUTION
     M = c.M/c.dev;
     if c.dev ~= 1
-        ipfac2 = 1:(M+1);
-        time        = interp1(time,ipfac2);
-        pres(j,:)     = interp1(pres(j,:),ipfac2);
-        T(j,:)      = interp1(T(j,:),ipfac2);
-        RH(j,:)     = interp1(RH(j,:),ipfac2);
-        WS(j,:)     = interp1(WS(j,:),ipfac2);
-        SRin(j,:)     = interp1(SRin(j,:),ipfac2);
-        SRout_mdl(j,:)  = interp1(SRout_mdl(j,:),ipfac2);
-        LRin(j,:)     = interp1(LRin(j,:),ipfac2);
-        Tsurf(j,:)    = interp1(Tsurf(j,:),ipfac2);
-        L(j,:)      = interp1(L(j,:),ipfac2);
-        GFsurf(j,:)   = interp1(GFsurf(j,:),ipfac2);
-        SHF(j,:)      = interp1(SHF(j,:),ipfac2);
-        LHF(j,:)      = interp1(LHF(j,:),ipfac2);
-        rainHF(j,:)   = interp1(rainHF(j,:),ipfac2);
-        meltflux(j,:)   = interp1(meltflux(j,:),ipfac2);
-        meltflux_internal(j,:) =  interp1(meltflux_internal(j,:),ipfac2);
-        %         H_aws(j,:)    = interp1(H_aws(j,:),ipfac2);
-        H_surf(j,:)   = interp1(H_surf(j,:),ipfac2);
-        H_melt_weq(j,:)   = interp1(H_melt_weq(j,:),ipfac2);
-        H_snow(j,:)   = interp1(H_snow(j,:),ipfac2);
-        H_subl(j,:)   = interp1(H_subl(j,:),ipfac2);
-        runoff(j,:)   = interp1(runoff(j,:),ipfac2)*c.dev;
-        rainfall(j,:)   = interp1(rainfall(j,:),ipfac2)*c.dev;
-        snowfall(j,:)   = interp1(snowfall(j,:),ipfac2)*c.dev;
-        snowthick(j,:)  = interp1(snowthick(j,:),ipfac2);
+        [time, pres(j,:),  T(j,:),  RH(j,:) , WS(j,:), SRin(j,:),...
+            SRout_mdl(j,:), LRin(j,:), Tsurf(j,:), L(j,:), GFsurf(j,:), ...
+            SHF(j,:), LHF(j,:) , rainHF(j,:), meltflux(j,:), ...
+            meltflux_internal(j,:), H_surf(j,:), H_melt_weq(j,:),...
+            H_snow(j,:), H_subl(j,:), runoff(j,:), rainfall(j,:) ,...
+            snowfall(j,:), snowthick(j,:)] ...
+                = InterpolateBackToOriginal(M, time, pres(j,:),  T(j,:),  RH(j,:) , WS(j,:), SRin(j,:),...
+                    SRout_mdl(j,:), LRin(j,:), Tsurf(j,:), L(j,:), GFsurf(j,:), ...
+                    SHF(j,:), LHF(j,:) , rainHF(j,:), meltflux(j,:), ...
+                    meltflux_internal(j,:), H_surf(j,:), H_melt_weq(j,:),...
+                    H_snow(j,:), H_subl(j,:), runoff(j,:), rainfall(j,:) ,...
+                    snowfall(j,:), snowthick(j,:));
     end
     
     %% Writing data to net cdf
 
     % Surface variables
     namefilesurf = sprintf('%s/surf-bin-%i.nc',c.OutputFolder,j);
+    if c.retmip
+        meltflux(:,j) = data_AWS.melt_mmweq/1000*c.dev*c.L_fus*c.rho_water/c.dt_obs; 
+        snowfall(:,j) = max(0,data_AWS.acc_subl_mmweq/1000); 
+        sublimation(:,j) = min(0,data_AWS.acc_subl_mmweq/1000); 
+    end
     
-    data = {time,       year,       day,            hour,   SRout(:,j), ...
+    data = {year,       day,            hour,   SRout(:,j), ...
             c.em*c.sigma*Tsurf(:,j).^4-(1-c.em)*LRin(:,j), SHF(:,j), LHF(:,j), ...
             GFsurf(:,j),GFsubsurf(:,j),    rainHF(:,j),        meltflux(:,j),  ...
             H_surf(:,j),    H_surf_weq(:,j),    H_melt_weq(:,j),    ...
@@ -385,32 +579,57 @@ for j=1:c.elev_bins
             snowfall(:,j),  rainfall(:,j),      SRout(:,j)./SRin(:,j), ...
             Tsurf(:,j)-c.T_0, L(:,j), sav.z_T, sublimation(:,j), snowbkt_out(:,j),...
             theta_2m(:,j), RHice2water( spechum2relhum(theta_2m(:,j), pres, q_2m(:,j),c),theta_2m, pres), ws_10m(:,j)};
-    varname =  {'Time'  'Year'  'Day'   'Hour' 'SRout_mdl' 'LRout_mdl'...
+    
+    varname =  {'Year'  'Day'   'Hour' 'SRout_mdl' 'LRout_mdl'...
         'SHF' 'LHF' 'GF' 'GFsubsurf' 'rainHF' 'meltflux'...
         'H_surf' 'H_surf_weq' 'H_melt' 'H_subl' 'H_comp' 'runoff' 'snowthick'...
         'snowfall' 'rainfall' 'Albedo' 'Tsurf' 'L_Ob', 'H_T','sublimation','snowbkt',...
         'theta_2m','RH_2m_wrtw','ws_10m'};
-    unit =  {'yr' 'yr' 'd' 'h' 'hPa' 'C' '%' 'ms-1' ...
-        'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2'...
-        'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2'...
-        'm' 'm_weq' 'm_weq' 'm_weq' 'm' 'm_weq' 'm_weq'...
-        'm_weq' 'm_weq' '-' 'C' 'Wm-2', 'm', 'm', 'm_weq','mweq','K','%','ms-1'};
-     for i=1:length(data)
-        WriteNetCDF(namefilesurf,data{i},varname{i},1, c.M, unit{i});
-     end
-      clear data varname unit
-      
+    
+    unit =  {'yr' 'd' 'h' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2' 'Wm-2'...
+        'Wm-2' 'm' 'm_weq' 'm_weq' 'm_weq' 'm' 'm_weq' 'm_weq'...
+        'm_weq' 'm_weq' '-' 'C' '-', 'm', 'm_weq','mweq','K','%','ms-1'};
+    
+    long_varname =  {'Year'  'Day of the year'   'HourUTC' ...
+        'Upward shortwave radiation flux' 'Calculated upward longwave radiation'...
+        'Sensible heat flux' 'Latent heat flux' 'Heat flux from the subsurface to the surface' ...
+        'GFsubsurf' 'Heat flux from rain' 'Excess energy available for melt'...
+        'Surface height above model lower boundary at start in meters'...
+        'Surface height in water equivalent' ...
+        'Cumulated melt in water equivalent'...
+        'Cumulated sublimation in water equivalent'...
+        'Cumulated compaction in meters' ...
+        'Cumulated runoff in water equivalent' ...
+        'Snow thickness (unused)'...
+        'Snowfall per time step' ...
+        'Rainfall per time step' ...
+        'Albedo' 'Calculated surface temperature', 'Obukhov length', ...
+        'Height of temperature sensor', 'Sublimation per time step',...
+        'Content of the snow bucket','2m temperature','2m relative humidity with regards to water',...
+        '10 m wind speed'};
+    
+    WriteNC_1D(namefilesurf, time, data, varname, unit, long_varname)
+    clear data varname unit long_varname
+
     % Subsurface variables
-    namefilesubsurf = sprintf('%s/subsurf-bin-%i.nc',c.OutputFolder,j);
+    thickness_act = sav.snowc.*(c.rho_water./sav.rhofirn )+ sav.snic .*(c.rho_water/c.rho_ice);
+    depth_act = cumsum(thickness_act, 1);
+    
     data = {T_ice(:,:,j) sav.rhofirn sav.slwc sav.snic sav.snowc sav.pdgrain...
         refreezing(:,:,j) sav.subsurf_compaction};
     varname =  {'T_ice' 'rho' 'slwc' 'snic' 'snowc' 'dgrain' 'rfrz' 'compaction'};
     unit =  {'C' 'kg/m^3' 'mweq' 'mweq' 'mweq' 'mweq' 'mm' 'm'};
+    long_varname = {'Firn temperature',...
+                    'Firn density excluding ice content',...
+                    'Firn liquid water content',...
+                    'Firn ice content',...
+                    'Firn snow content',...
+                    'Firn grain size',...
+                    'Subsurface meltwater refreezing',...
+                    'Firn compaction'};
 
-    for i = 1:length(data)
-        WriteNetCDF(namefilesubsurf, data{i}, varname{i}, c.M, c.jpgrnd, unit{i})
-    end
-    clear data varname unit
+    WriteNC_2D(sprintf('%s/subsurf-bin-%i.nc',c.OutputFolder,j), ...
+        time, depth_act, data, varname, unit, long_varname);
     
     if c.track_density
             % Subsurface variables
@@ -424,17 +643,36 @@ for j=1:c.elev_bins
         end
         clear data varname unit
     end
+    if c.track_temp        
+        varname =  {'T_firn_ini', 'T_firn_after_dif', 'T_firn_after_snow',...
+            'T_firn_after_sub', 'T_firn_after_melt', 'T_firn_after_refreeze',...
+            'T_firn_after_SI_ice'};
+        unit =  {'K', 'K', 'K', 'K', 'K', 'K', 'K'};
+        long_varname =  {   'Firn temperature at the beginning of each time step', ...
+                            'Firn temperature after diffusion', ...
+                            'Firn temperature after snowfall', ...
+                            'Firn temperature after sublimation', ...
+                            'Firn temperature after melt', ...
+                            'Firn temperature after refreezing', ...
+                            'Firn temperature after super-imposed ice fromation'};
+
+       try WriteNC_2D(sprintf('%s/track_firn_temperature.nc',c.OutputFolder), ...
+            time, depth_act, temp_tracker, varname, unit, long_varname);
+       catch me
+           osdh =0;
+       end
+    end
   
 end  % END OF SPATIAL LOOP -----------------------------------------------------------------------
+
 save(strcat(c.OutputFolder,'/run_param.mat'),'c')
 
-% Output the latent and sensible heat fluxes along with the stability
-% metrics. Will be done in a smarter way in a future release.
-% M = [time SHF LHF sav.o_THF Re Ri err];
-% dlmwrite(sprintf('THF_%s_%i.csv',c.station ,c.THF_calc),M,'Delimiter',',','precision',9);
-
-disp ('Done...')
-toc
+if c.THF_calc == 3
+    M = [time SHF LHF o_THF SHF2 LHF2 o_THF2 Re Ri err];
+    dlmwrite(sprintf('./Output/THF study/THF_%s_%i.csv',c.station ,c.THF_calc),M,'Delimiter',',','precision',9);
+    % disp ('Done...')
+end
+    toc
 
 end
 

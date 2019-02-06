@@ -2,13 +2,6 @@ function [var_new] = ConvertToGivenDepthScale(depth_old, var_old, depth_new,opt)
 % Interpolates the depth profile of a given variable old_var 
 % (temperature grain size....) according to a given scale new_depth in real m
 
-%     % removing values in old_var that are beyond new_depth
-%     var_old(depth_old > depth_new(end)) = [];
-%     depth_old(depth_old > depth_new(end))=[];
-
-    % we limit the new scale to the values that are given within the oldscale
-%     new_depth_lim = depth_new(depth_new <= depth_old(end));
-    
     transpose_at_the_end = 0;
 
     if isrow(depth_old) ~= isrow(depth_new)
@@ -93,7 +86,10 @@ function [var_new] = ConvertToGivenDepthScale(depth_old, var_old, depth_new,opt)
             thick_old = depth_old;
             thick_old(2:end) = depth_old(2:end) - depth_old(1:end-1);
 
-            ind_bin = discretize(depth_merged,[0 depth_old],'IncludedEdge','right');
+try            ind_bin = discretize(depth_merged,[0 depth_old],'IncludedEdge','right');
+catch me
+    djb=0;
+end
             if sum(isnan(ind_bin))>1
                 error('Some depths asked in depth_new not covered by depth_old')
             end

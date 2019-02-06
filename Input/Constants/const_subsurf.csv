@@ -29,10 +29,6 @@ calc_CLliq;1;uses Coleou and Lesaffre to calculate the irreduscible water conten
   dgrainNew ;0.1; Grain diameter of newfallen snow (in mm);
   ;;;
   delta_time ;3600; Model time step (s);
-  delta_time_flux ;21600; Flux average time step (s);
-  delta_time_total;86400; Integration time;
-;;  nstep    ; delta_time_total / delta_time
-;;  nstepflx ; delta_time_flux  / delta_time
 ;;;
 eps ;0.1; Tuning parameters;
 missing_value ;-999; Missing value;
