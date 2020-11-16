@@ -1,0 +1,1 @@
+{'matlab_output_folder': 'Kan_U_BIGiceslab_100layers', 'initial_density_profile': 'DensityProfile_KAN-U_BIGiceslab', 'number_of_layers': '100layers', 'time_period': '1989-2019'}
