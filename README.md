@@ -1,7 +1,9 @@
 # The GEUS Surface Energy Balance and Firn Model
+This is a fork of The GEUS Surface Energy Balance and Firn Model written by:
 Baptiste Vandecrux
 bav@geus.dk
-All the scripts were developed on Matlab 2015b.
+
+We've added some new scripts written both in python and matlab, which enables us to study the formation of Ice-slabs. These scripts are freely available under a CC BY-SA license. 
 
 # Table of Contents
 1. [Overview](#overview)
