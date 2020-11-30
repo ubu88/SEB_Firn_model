@@ -29,6 +29,8 @@ initial_density_profile=simulation_inf['initial_density_profile']
 number_of_layers=simulation_inf['number_of_layers']
 time_period=simulation_inf['time_period']
 
+
+target_hr = 204525
 start_date = datetime.date(1989,1,1)
 target_hr_delta = datetime.timedelta(hours=target_hr)
 
