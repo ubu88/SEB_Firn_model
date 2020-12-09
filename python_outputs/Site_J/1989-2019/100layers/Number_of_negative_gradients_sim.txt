@@ -1,0 +1,1 @@
+{'spacing=10cm': 55, 'spacing=20cm': 31, 'spacing=50cm': 10, 'spacing=100cm': 7, 'spacing=190cm': 5}
